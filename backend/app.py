@@ -574,6 +574,266 @@ def get_user_orders(user_id):
         return jsonify({
             "message": str(e)
         }), 500
+
+
+# =========================
+# TABLE BOOKINGS
+# =========================
+
+def ensure_booking_and_support_tables(db):
+    cursor = db.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS table_bookings (
+            booking_id VARCHAR(50) PRIMARY KEY,
+            user_id INT NOT NULL,
+            restaurant_id INT NOT NULL,
+            restaurant_name VARCHAR(150),
+            guest_name VARCHAR(100) NOT NULL,
+            guest_phone VARCHAR(20) NOT NULL,
+            guests_count INT NOT NULL DEFAULT 2,
+            booking_date DATE NOT NULL,
+            booking_time VARCHAR(20) NOT NULL,
+            seating_area VARCHAR(50) DEFAULT 'Indoor AC',
+            occasion VARCHAR(50) DEFAULT 'Casual Dining',
+            special_requests TEXT,
+            booking_status VARCHAR(50) DEFAULT 'Confirmed',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS support_tickets (
+            ticket_id VARCHAR(50) PRIMARY KEY,
+            user_id INT NOT NULL,
+            order_id INT,
+            category VARCHAR(100) NOT NULL,
+            subject VARCHAR(200) NOT NULL,
+            description TEXT NOT NULL,
+            status VARCHAR(50) DEFAULT 'In Review',
+            resolution TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    db.commit()
+    cursor.close()
+
+
+@app.route("/table-bookings", methods=["POST"])
+def create_table_booking():
+    try:
+        data = request.get_json()
+        user_id = data.get("user_id", 1)
+        restaurant_id = data.get("restaurant_id", 1)
+        restaurant_name = data.get("restaurant_name", "SmartBite Dining")
+        guest_name = data.get("guest_name")
+        guest_phone = data.get("guest_phone")
+        guests_count = data.get("guests_count", 2)
+        booking_date = data.get("booking_date")
+        booking_time = data.get("booking_time", "07:30 PM")
+        seating_area = data.get("seating_area", "Indoor AC")
+        occasion = data.get("occasion", "Casual Dining")
+        special_requests = data.get("special_requests", "None")
+
+        if not guest_name or not guest_phone or not booking_date:
+            return jsonify({
+                "status": "error",
+                "message": "Guest name, phone, and booking date are required"
+            }), 400
+
+        import random
+        booking_id = f"SB-HYD-{random.randint(1000, 9999)}"
+
+        db = get_db_connection()
+        ensure_booking_and_support_tables(db)
+        cursor = db.cursor()
+
+        cursor.execute("""
+            INSERT INTO table_bookings
+            (booking_id, user_id, restaurant_id, restaurant_name, guest_name, guest_phone, guests_count, booking_date, booking_time, seating_area, occasion, special_requests, booking_status)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'Confirmed')
+        """, (booking_id, user_id, restaurant_id, restaurant_name, guest_name, guest_phone, guests_count, booking_date, booking_time, seating_area, occasion, special_requests))
+
+        db.commit()
+        cursor.close()
+        db.close()
+
+        booking_obj = {
+            "booking_id": booking_id,
+            "user_id": user_id,
+            "restaurant_id": restaurant_id,
+            "restaurant_name": restaurant_name,
+            "guest_name": guest_name,
+            "guest_phone": guest_phone,
+            "guests_count": guests_count,
+            "booking_date": str(booking_date),
+            "booking_time": booking_time,
+            "seating_area": seating_area,
+            "occasion": occasion,
+            "special_requests": special_requests,
+            "status": "Confirmed"
+        }
+
+        return jsonify({
+            "status": "success",
+            "message": "Table reserved successfully",
+            "booking": booking_obj
+        }), 201
+
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
+
+
+@app.route("/table-bookings/<int:user_id>", methods=["GET"])
+def get_user_table_bookings(user_id):
+    try:
+        db = get_db_connection()
+        ensure_booking_and_support_tables(db)
+        cursor = db.cursor(dictionary=True)
+
+        cursor.execute("""
+            SELECT
+                booking_id,
+                user_id,
+                restaurant_id,
+                restaurant_name,
+                guest_name,
+                guest_phone,
+                guests_count,
+                booking_date,
+                booking_time,
+                seating_area,
+                occasion,
+                special_requests,
+                booking_status AS status,
+                created_at
+            FROM table_bookings
+            WHERE user_id = %s
+            ORDER BY created_at DESC
+        """, (user_id,))
+
+        bookings = cursor.fetchall()
+        for b in bookings:
+            if b.get("booking_date"):
+                b["booking_date"] = str(b["booking_date"])
+            if b.get("created_at"):
+                b["created_at"] = str(b["created_at"])
+
+        cursor.close()
+        db.close()
+
+        return jsonify(bookings), 200
+
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
+
+
+# =========================
+# CUSTOMER SUPPORT TICKETS
+# =========================
+
+@app.route("/support-tickets", methods=["POST"])
+def create_support_ticket():
+    try:
+        data = request.get_json()
+        user_id = data.get("user_id", 1)
+        order_id = data.get("order_id")
+        category = data.get("category", "General Inquiry")
+        subject = data.get("subject", "").strip()
+        description = data.get("description", "").strip()
+
+        if not subject or not description:
+            return jsonify({
+                "status": "error",
+                "message": "Subject and description are required"
+            }), 400
+
+        import random
+        ticket_id = f"TKT-{random.randint(10000, 99999)}"
+        resolution = "SmartBite Care has received your ticket. An executive is actively handling your request."
+
+        db = get_db_connection()
+        ensure_booking_and_support_tables(db)
+        cursor = db.cursor()
+
+        cursor.execute("""
+            INSERT INTO support_tickets
+            (ticket_id, user_id, order_id, category, subject, description, status, resolution)
+            VALUES (%s, %s, %s, %s, %s, %s, 'In Review', %s)
+        """, (ticket_id, user_id, order_id if order_id else None, category, subject, description, resolution))
+
+        db.commit()
+        cursor.close()
+        db.close()
+
+        ticket_obj = {
+            "ticket_id": ticket_id,
+            "user_id": user_id,
+            "order_id": order_id,
+            "category": category,
+            "subject": subject,
+            "description": description,
+            "status": "In Review",
+            "resolution": resolution,
+            "date": "Today"
+        }
+
+        return jsonify({
+            "status": "success",
+            "message": "Support ticket created successfully",
+            "ticket": ticket_obj
+        }), 201
+
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
+
+
+@app.route("/support-tickets/<int:user_id>", methods=["GET"])
+def get_user_support_tickets(user_id):
+    try:
+        db = get_db_connection()
+        ensure_booking_and_support_tables(db)
+        cursor = db.cursor(dictionary=True)
+
+        cursor.execute("""
+            SELECT
+                ticket_id,
+                user_id,
+                order_id,
+                category,
+                subject,
+                description,
+                status,
+                resolution,
+                created_at AS date
+            FROM support_tickets
+            WHERE user_id = %s
+            ORDER BY created_at DESC
+        """, (user_id,))
+
+        tickets = cursor.fetchall()
+        for t in tickets:
+            if t.get("date"):
+                t["date"] = str(t["date"])
+
+        cursor.close()
+        db.close()
+
+        return jsonify(tickets), 200
+
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
+
 if __name__ == "__main__":
 
     print("-----------------------------------")

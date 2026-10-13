@@ -322,17 +322,36 @@ export const apiService = {
 
   // 8. TABLE BOOKING
   async createTableBooking(bookingData) {
-    const bookingId = "TB-" + Math.floor(1000 + Math.random() * 9000);
+    let createdBooking = null;
+    try {
+      const res = await fetch(`${API_BASE_URL}/table-bookings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(bookingData)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.booking) {
+          createdBooking = data.booking;
+        }
+      }
+    } catch (e) {
+      console.warn("Backend /table-bookings POST error, falling back to local store:", e.message);
+    }
+
+    const bookingId = createdBooking?.booking_id || "SB-HYD-" + Math.floor(1000 + Math.random() * 9000);
     const newBooking = {
       booking_id: bookingId,
       restaurant_id: bookingData.restaurant_id,
-      restaurant_name: bookingData.restaurant_name,
-      user_id: bookingData.user_id,
+      restaurant_name: bookingData.restaurant_name || "SmartBite Dining",
+      user_id: bookingData.user_id || 1,
       guest_name: bookingData.guest_name,
       guest_phone: bookingData.guest_phone,
-      guests_count: bookingData.guests_count,
+      guests_count: bookingData.guests_count || 2,
       booking_date: bookingData.booking_date,
       booking_time: bookingData.booking_time,
+      seating_area: bookingData.seating_area || "Indoor AC",
+      occasion: bookingData.occasion || "Casual Dining",
       special_requests: bookingData.special_requests || "None",
       status: "Confirmed",
       created_at: new Date().toLocaleDateString("en-IN")
@@ -352,8 +371,34 @@ export const apiService = {
   },
 
   async getTableBookings(userId) {
+    if (userId) {
+      try {
+        const res = await fetch(`${API_BASE_URL}/table-bookings/${userId}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            setStored("smartbite_bookings", data);
+            return data;
+          }
+        }
+      } catch (e) {
+        console.warn("Backend /table-bookings GET error, using local:", e.message);
+      }
+    }
     const local = getStored("smartbite_bookings", []);
-    return local.filter((b) => b.user_id === userId);
+    return userId ? local.filter((b) => Number(b.user_id) === Number(userId)) : local;
+  },
+
+  async cancelTableBooking(bookingId) {
+    const local = getStored("smartbite_bookings", []);
+    const updated = local.map((b) => (b.booking_id === bookingId ? { ...b, status: "Cancelled" } : b));
+    setStored("smartbite_bookings", updated);
+    this.addNotification({
+      title: `Booking #${bookingId} Cancelled`,
+      message: `Your table reservation has been successfully cancelled.`,
+      type: "general"
+    });
+    return { success: true };
   },
 
   // 9. NOTIFICATIONS
@@ -386,17 +431,35 @@ export const apiService = {
 
   // 10. CUSTOMER SUPPORT
   async submitSupportTicket(ticket) {
-    const ticketId = "TKT-" + Math.floor(10000 + Math.random() * 90000);
+    let createdTicket = null;
+    try {
+      const res = await fetch(`${API_BASE_URL}/support-tickets`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(ticket)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.ticket) {
+          createdTicket = data.ticket;
+        }
+      }
+    } catch (e) {
+      console.warn("Backend /support-tickets POST error, falling back to local:", e.message);
+    }
+
+    const ticketId = createdTicket?.ticket_id || "TKT-" + Math.floor(10000 + Math.random() * 90000);
     const newTicket = {
       ticket_id: ticketId,
-      user_id: ticket.user_id,
+      user_id: ticket.user_id || 1,
       category: ticket.category || "General Inquiry",
       subject: ticket.subject,
       description: ticket.description,
       order_id: ticket.order_id || null,
+      priority: ticket.priority || "Normal",
       status: "In Review",
       date: new Date().toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" }),
-      resolution: "SmartBite Care has received your ticket. Our team is actively reviewing this."
+      resolution: "SmartBite Care executive Priya Sharma has been assigned to your ticket. We are reviewing your details."
     };
 
     const tickets = getStored("smartbite_support_tickets", []);
@@ -405,16 +468,30 @@ export const apiService = {
 
     this.addNotification({
       title: `Support Ticket Created: #${ticketId} 🎧`,
-      message: `We have logged your query regarding "${newTicket.subject}". We will resolve it shortly.`,
+      message: `We have logged your query regarding "${newTicket.subject}". Our care team is on it!`,
       type: "support"
     });
 
     return { success: true, ticket: newTicket };
   },
 
-  getSupportTickets(userId) {
+  async getSupportTickets(userId) {
+    if (userId) {
+      try {
+        const res = await fetch(`${API_BASE_URL}/support-tickets/${userId}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            setStored("smartbite_support_tickets", data);
+            return data;
+          }
+        }
+      } catch (e) {
+        console.warn("Backend /support-tickets GET error, using local:", e.message);
+      }
+    }
     const tickets = getStored("smartbite_support_tickets", []);
-    return tickets.filter((t) => t.user_id === userId);
+    return userId ? tickets.filter((t) => Number(t.user_id) === Number(userId)) : tickets;
   },
 
   // 11. REVIEWS

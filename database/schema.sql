@@ -94,3 +94,38 @@ CREATE TABLE IF NOT EXISTS favorites (
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
     FOREIGN KEY (food_id) REFERENCES food_items(food_id) ON DELETE CASCADE
 );
+
+-- Table Bookings Table
+CREATE TABLE IF NOT EXISTS table_bookings (
+    booking_id VARCHAR(50) PRIMARY KEY,
+    user_id INT NOT NULL,
+    restaurant_id INT NOT NULL,
+    restaurant_name VARCHAR(150),
+    guest_name VARCHAR(100) NOT NULL,
+    guest_phone VARCHAR(20) NOT NULL,
+    guests_count INT NOT NULL DEFAULT 2,
+    booking_date DATE NOT NULL,
+    booking_time VARCHAR(20) NOT NULL,
+    seating_area VARCHAR(50) DEFAULT 'Indoor AC',
+    occasion VARCHAR(50) DEFAULT 'Casual Dining',
+    special_requests TEXT,
+    booking_status VARCHAR(50) DEFAULT 'Confirmed',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (restaurant_id) REFERENCES restaurants(restaurant_id) ON DELETE CASCADE
+);
+
+-- Customer Support Tickets Table
+CREATE TABLE IF NOT EXISTS support_tickets (
+    ticket_id VARCHAR(50) PRIMARY KEY,
+    user_id INT NOT NULL,
+    order_id INT,
+    category VARCHAR(100) NOT NULL,
+    subject VARCHAR(200) NOT NULL,
+    description TEXT NOT NULL,
+    status VARCHAR(50) DEFAULT 'In Review',
+    resolution TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (order_id) REFERENCES orders(order_id) ON DELETE SET NULL
+);

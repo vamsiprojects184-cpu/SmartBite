@@ -6,7 +6,9 @@ export default function UserProfileModal({
   orders = [],
   onClose,
   onLogout,
-  onTrackOrder
+  onTrackOrder,
+  onOpenBookings,
+  onOpenSupport
 }) {
   const [activeTab, setActiveTab] = useState("diet_profile"); // "diet_profile", "orders", "addresses"
   const [dietProfile, setDietProfile] = useState({
@@ -104,6 +106,30 @@ export default function UserProfileModal({
           >
             📍 Saved Addresses
           </button>
+          {onOpenBookings && (
+            <button
+              type="button"
+              className="profile-tab-btn"
+              onClick={() => {
+                onClose();
+                onOpenBookings();
+              }}
+            >
+              🍽️ Table Bookings
+            </button>
+          )}
+          {onOpenSupport && (
+            <button
+              type="button"
+              className="profile-tab-btn"
+              onClick={() => {
+                onClose();
+                onOpenSupport();
+              }}
+            >
+              🎧 Help & Care
+            </button>
+          )}
         </div>
 
         {/* Tab 1: Diet Profile */}

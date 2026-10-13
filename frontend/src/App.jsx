@@ -15,6 +15,8 @@ import NutritionDashboard from "./components/NutritionDashboard";
 import CategoryBrowse from "./components/CategoryBrowse";
 import TrendingHighlights from "./components/TrendingHighlights";
 import CartDrawer from "./components/CartDrawer";
+import TableBookingModal from "./components/TableBookingModal";
+import CustomerSupportModal from "./components/CustomerSupportModal";
 
 function App() {
   // Core state
@@ -75,6 +77,9 @@ function App() {
   const [compareData, setCompareData] = useState(null); // { foodA, foodB }
   const [showUserProfile, setShowUserProfile] = useState(false);
   const [showAIAssistant, setShowAIAssistant] = useState(false);
+  const [showTableBooking, setShowTableBooking] = useState(false);
+  const [tableBookingRestaurant, setTableBookingRestaurant] = useState(null);
+  const [showCustomerSupport, setShowCustomerSupport] = useState(false);
   const [favToast, setFavToast] = useState("");
 
   // Voice speech state for main search
@@ -367,9 +372,52 @@ function App() {
           <a href="#trending" onClick={() => setMobileMenuOpen(false)}>Trending</a>
           <a href="#foods" onClick={() => setMobileMenuOpen(false)}>Food Menu</a>
           <a href="#nutrition" onClick={() => setMobileMenuOpen(false)}>Nutrition Hub</a>
+          <a
+            href="#table-booking"
+            onClick={(e) => {
+              e.preventDefault();
+              setTableBookingRestaurant(null);
+              setShowTableBooking(true);
+              setMobileMenuOpen(false);
+            }}
+          >
+            🍽️ Book Table
+          </a>
+          <a
+            href="#support"
+            onClick={(e) => {
+              e.preventDefault();
+              setShowCustomerSupport(true);
+              setMobileMenuOpen(false);
+            }}
+          >
+            🎧 Support
+          </a>
         </nav>
 
         <div className="nav-actions">
+          {/* Table Booking Highlight CTA */}
+          <button
+            type="button"
+            className="nav-reserve-btn"
+            onClick={() => {
+              setTableBookingRestaurant(null);
+              setShowTableBooking(true);
+            }}
+            title="Reserve a Table at Top Restaurants"
+          >
+            🍽️ Book Table
+          </button>
+
+          {/* Customer Support Icon */}
+          <button
+            type="button"
+            className="nav-icon"
+            onClick={() => setShowCustomerSupport(true)}
+            title="Customer Support & Helpdesk"
+          >
+            🎧
+          </button>
 
           {/* Orders Icon */}
           <button
@@ -631,12 +679,30 @@ function App() {
 
           <div className="hero-buttons" style={{ marginTop: "24px" }}>
             <a href="#restaurants" className="primary-btn">
-              Explore Hyderabad Kitchens ↓
+              Explore Kitchens ↓
             </a>
-            <button className="secondary-btn" onClick={() => setShowAIAssistant(true)}>
+            <button
+              type="button"
+              className="primary-btn hero-reserve-btn"
+              onClick={() => {
+                setTableBookingRestaurant(null);
+                setShowTableBooking(true);
+              }}
+            >
+              🍽️ Reserve Table
+            </button>
+            <button type="button" className="secondary-btn" onClick={() => setShowAIAssistant(true)}>
               🤖 Ask AI Nutritionist
             </button>
             <button
+              type="button"
+              className="secondary-btn"
+              onClick={() => setShowCustomerSupport(true)}
+            >
+              🎧 24/7 Support
+            </button>
+            <button
+              type="button"
               className="secondary-btn"
               onClick={() =>
                 setCompareData({ foodA: foods[0], foodB: foods[4] || foods[1] })
@@ -718,7 +784,22 @@ function App() {
           </div>
         </div>
 
-        <div className="feature" onClick={() => setShowAIAssistant(true)} style={{ cursor: "pointer" }}>
+        <div
+          className="feature feature-interactive"
+          onClick={() => {
+            setTableBookingRestaurant(null);
+            setShowTableBooking(true);
+          }}
+          style={{ cursor: "pointer" }}
+        >
+          <div className="feature-icon">🍽️</div>
+          <div>
+            <h3>Table Reservations</h3>
+            <p>Instant confirmed dining booking (Free)</p>
+          </div>
+        </div>
+
+        <div className="feature feature-interactive" onClick={() => setShowAIAssistant(true)} style={{ cursor: "pointer" }}>
           <div className="feature-icon">🤖</div>
           <div>
             <h3>AI Diet Assistant</h3>
@@ -726,26 +807,15 @@ function App() {
           </div>
         </div>
 
-        <div className="feature">
-          <div className="feature-icon">🍴</div>
-          <div>
-            <h3>Hyderabad Icons</h3>
-            <p>Paradise, Bawarchi, Chutneys & Pista House</p>
-          </div>
-        </div>
-
         <div
-          className="feature"
-          onClick={() => {
-            const el = document.getElementById("nutrition");
-            el?.scrollIntoView({ behavior: "smooth" });
-          }}
+          className="feature feature-interactive"
+          onClick={() => setShowCustomerSupport(true)}
           style={{ cursor: "pointer" }}
         >
-          <div className="feature-icon">⚡</div>
+          <div className="feature-icon">🎧</div>
           <div>
-            <h3>Smart Macro Tracking</h3>
-            <p>Real-time protein, calorie & macro totals</p>
+            <h3>24/7 Customer Care</h3>
+            <p>Live order help, ticket tracker & WhatsApp</p>
           </div>
         </div>
       </section>
@@ -806,16 +876,27 @@ function App() {
                     </span>
                   </div>
 
-                  <div style={{ marginTop: "12px" }}>
+                  <div className="restaurant-card-actions-row">
                     <button
+                      type="button"
                       className="restaurant-btn"
-                      style={{ width: "100%" }}
                       onClick={(e) => {
                         e.stopPropagation();
                         setSelectedRestaurantDetail(restaurant);
                       }}
                     >
-                      Explore Menu & Reviews →
+                      Menu & Info →
+                    </button>
+                    <button
+                      type="button"
+                      className="restaurant-reserve-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setTableBookingRestaurant(restaurant);
+                        setShowTableBooking(true);
+                      }}
+                    >
+                      🍽️ Reserve
                     </button>
                   </div>
                 </div>
@@ -1155,6 +1236,11 @@ function App() {
           onSelectFood={(f) => setSelectedFoodDetail(f)}
           onToggleFavorite={handleToggleFavorite}
           favoriteFoodIds={favoriteFoodIds}
+          onBookTable={(r) => {
+            setSelectedRestaurantDetail(null);
+            setTableBookingRestaurant(r);
+            setShowTableBooking(true);
+          }}
         />
       )}
 
@@ -1196,6 +1282,15 @@ function App() {
           onLogout={handleLogout}
           onTrackOrder={(orderId) => {
             setTrackingOrderId(orderId);
+          }}
+          onOpenBookings={() => {
+            setShowUserProfile(false);
+            setTableBookingRestaurant(null);
+            setShowTableBooking(true);
+          }}
+          onOpenSupport={() => {
+            setShowUserProfile(false);
+            setShowCustomerSupport(true);
           }}
         />
       )}
@@ -1400,16 +1495,27 @@ function App() {
                     <p>Status: {order.order_status || "Confirmed"}</p>
                     <small>{order.order_date || "Recent"}</small>
                   </div>
-                  <button
-                    className="track-cta-btn"
-                    onClick={() => {
-                      setShowOrders(false);
-                      setTrackingOrderId(order.order_id);
-                    }}
-                    style={{ marginTop: "10px" }}
-                  >
-                    Track Delivery 🛵
-                  </button>
+                  <div style={{ display: "flex", gap: "8px", marginTop: "10px", flexWrap: "wrap" }}>
+                    <button
+                      className="track-cta-btn"
+                      onClick={() => {
+                        setShowOrders(false);
+                        setTrackingOrderId(order.order_id);
+                      }}
+                    >
+                      Track Delivery 🛵
+                    </button>
+                    <button
+                      type="button"
+                      className="order-support-action-btn"
+                      onClick={() => {
+                        setShowOrders(false);
+                        setShowCustomerSupport(true);
+                      }}
+                    >
+                      Need Help? 🎧
+                    </button>
+                  </div>
                 </div>
               ))
             )}
@@ -1514,6 +1620,94 @@ function App() {
           </div>
         </div>
       )}
+
+      {/* ========================================================
+          17. TABLE BOOKING MODAL
+          ======================================================== */}
+      {showTableBooking && (
+        <TableBookingModal
+          restaurant={tableBookingRestaurant}
+          restaurants={restaurants}
+          loggedInUser={loggedInUser}
+          onClose={() => {
+            setShowTableBooking(false);
+            setTableBookingRestaurant(null);
+          }}
+          onBookingSuccess={() => {
+            refreshNotifications();
+          }}
+        />
+      )}
+
+      {/* ========================================================
+          18. CUSTOMER SUPPORT & CARE MODAL
+          ======================================================== */}
+      {showCustomerSupport && (
+        <CustomerSupportModal
+          loggedInUser={loggedInUser}
+          orders={orders}
+          onClose={() => setShowCustomerSupport(false)}
+        />
+      )}
+
+      {/* ========================================================
+          19. FLOATING QUICK ACTIONS DOCK
+          ======================================================== */}
+      <div className="floating-quick-dock" aria-label="SmartBite Quick Menu">
+        <button
+          type="button"
+          className="dock-item-btn reserve"
+          onClick={() => {
+            setTableBookingRestaurant(null);
+            setShowTableBooking(true);
+          }}
+          title="Reserve a Dining Table"
+        >
+          <span className="dock-icon">🍽️</span>
+          <span className="dock-label">Table Booking</span>
+        </button>
+
+        <button
+          type="button"
+          className="dock-item-btn support"
+          onClick={() => setShowCustomerSupport(true)}
+          title="24/7 Customer Support & Help"
+        >
+          <span className="dock-icon">🎧</span>
+          <span className="dock-label">24/7 Help</span>
+        </button>
+
+        <button
+          type="button"
+          className="dock-item-btn ai"
+          onClick={() => setShowAIAssistant(true)}
+          title="AI Nutrition Assistant"
+        >
+          <span className="dock-icon">🤖</span>
+          <span className="dock-label">AI Dietitian</span>
+        </button>
+
+        <button
+          type="button"
+          className="dock-item-btn cart"
+          onClick={() => setShowCart(true)}
+          title="View Cart"
+        >
+          <span className="dock-icon">🛒</span>
+          {cart.length > 0 && (
+            <span className="dock-badge">{cart.reduce((s, i) => s + (i.quantity || 1), 0)}</span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          className="dock-item-btn scroll-top"
+          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+          title="Scroll to Top"
+        >
+          <span className="dock-icon">↑</span>
+        </button>
+      </div>
     </div>
   );
 }

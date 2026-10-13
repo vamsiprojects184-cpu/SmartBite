@@ -7,7 +7,8 @@ export default function RestaurantDetailModal({
   onAddToCart,
   onSelectFood,
   onToggleFavorite,
-  favoriteFoodIds = []
+  favoriteFoodIds = [],
+  onBookTable
 }) {
   const [activeTab, setActiveTab] = useState("menu"); // "menu" or "reviews"
   const [menuFilter, setMenuFilter] = useState("all"); // "all", "veg", "non-veg"
@@ -81,6 +82,19 @@ export default function RestaurantDetailModal({
               💬 Reviews & Ratings
             </button>
           </div>
+
+          {onBookTable && (
+            <button
+              type="button"
+              className="restaurant-reserve-cta-btn"
+              onClick={() => {
+                onClose();
+                onBookTable(restaurant);
+              }}
+            >
+              🍽️ Reserve Table
+            </button>
+          )}
         </div>
 
         {/* Content Area */}

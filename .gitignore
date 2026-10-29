@@ -45,6 +45,11 @@ release.properties
 Thumbs.db
 desktop.ini
 
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
 # Environment variables & secrets
 .env
 .env.*

@@ -1,22 +1,242 @@
 from flask import Flask, jsonify, send_from_directory, request
 from flask_cors import CORS
-import mysql.connector
+import sqlite3
 import os
+import random
 
 app = Flask(__name__)
 CORS(app)
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+IMAGE_FOLDER = os.path.join(BASE_DIR, "image")
+DB_PATH = os.path.join(BASE_DIR, "smartbite.db")
+
 # =========================
-# DATABASE CONNECTION
+# SQLITE COMPATIBILITY WRAPPER
 # =========================
 
+class SQLiteCursorWrapper:
+    def __init__(self, cursor, dictionary=False):
+        self._cursor = cursor
+        self.dictionary = dictionary
+        self.lastrowid = None
+
+    def execute(self, query, params=None):
+        q = query.replace("%s", "?")
+        if params is not None:
+            self._cursor.execute(q, params)
+        else:
+            self._cursor.execute(q)
+        self.lastrowid = self._cursor.lastrowid
+        return self
+
+    def fetchall(self):
+        rows = self._cursor.fetchall()
+        if self.dictionary and self._cursor.description:
+            cols = [col[0] for col in self._cursor.description]
+            return [dict(zip(cols, row)) for row in rows]
+        return rows
+
+    def fetchone(self):
+        row = self._cursor.fetchone()
+        if row is None:
+            return None
+        if self.dictionary and self._cursor.description:
+            cols = [col[0] for col in self._cursor.description]
+            return dict(zip(cols, row))
+        return row
+
+    def close(self):
+        self._cursor.close()
+
+
+class SQLiteConnectionWrapper:
+    def __init__(self, db_path):
+        self._conn = sqlite3.connect(db_path, check_same_thread=False)
+
+    def cursor(self, dictionary=False):
+        return SQLiteCursorWrapper(self._conn.cursor(), dictionary=dictionary)
+
+    def commit(self):
+        self._conn.commit()
+
+    def rollback(self):
+        self._conn.rollback()
+
+    def close(self):
+        self._conn.close()
+
+
 def get_db_connection():
-    return mysql.connector.connect(
-        host="localhost",
-        user="root",
-        password="1234",
-        database="smartbite"
-    )
+    return SQLiteConnectionWrapper(DB_PATH)
+
+
+def init_sqlite_database():
+    """Initializes tables and seed data if not existing."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    cursor.executescript("""
+        CREATE TABLE IF NOT EXISTS users (
+            user_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            email TEXT NOT NULL UNIQUE,
+            phone TEXT,
+            password TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS restaurants (
+            restaurant_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            description TEXT,
+            address TEXT,
+            city TEXT DEFAULT 'Hyderabad',
+            phone TEXT,
+            email TEXT,
+            rating REAL DEFAULT 4.5,
+            is_active INTEGER DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS categories (
+            category_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            category_name TEXT NOT NULL UNIQUE,
+            description TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS food_items (
+            food_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            restaurant_id INTEGER NOT NULL,
+            category_id INTEGER,
+            food_name TEXT NOT NULL,
+            description TEXT,
+            price REAL NOT NULL,
+            calories INTEGER DEFAULT 0,
+            protein REAL DEFAULT 0.0,
+            carbohydrates REAL DEFAULT 0.0,
+            fat REAL DEFAULT 0.0,
+            fiber REAL DEFAULT 0.0,
+            health_rating INTEGER DEFAULT 85,
+            is_vegetarian INTEGER DEFAULT 0,
+            image_url TEXT,
+            is_available INTEGER DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS orders (
+            order_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            restaurant_id INTEGER,
+            order_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            total_amount REAL NOT NULL,
+            order_status TEXT DEFAULT 'Pending',
+            delivery_address TEXT,
+            payment_method TEXT DEFAULT 'UPI'
+        );
+
+        CREATE TABLE IF NOT EXISTS order_items (
+            order_item_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            order_id INTEGER NOT NULL,
+            food_id INTEGER NOT NULL,
+            quantity INTEGER DEFAULT 1,
+            price REAL NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS favorites (
+            favorite_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            food_id INTEGER NOT NULL,
+            restaurant_id INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (user_id, food_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS table_bookings (
+            booking_id TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            restaurant_id INTEGER NOT NULL,
+            restaurant_name TEXT,
+            guest_name TEXT NOT NULL,
+            guest_phone TEXT NOT NULL,
+            guests_count INTEGER NOT NULL DEFAULT 2,
+            booking_date TEXT NOT NULL,
+            booking_time TEXT NOT NULL,
+            seating_area TEXT DEFAULT 'Indoor AC',
+            occasion TEXT DEFAULT 'Casual Dining',
+            special_requests TEXT,
+            booking_status TEXT DEFAULT 'Confirmed',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS support_tickets (
+            ticket_id TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            order_id INTEGER,
+            category TEXT NOT NULL,
+            subject TEXT NOT NULL,
+            description TEXT NOT NULL,
+            status TEXT DEFAULT 'In Review',
+            resolution TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+    """)
+    conn.commit()
+
+    # Seed restaurants if empty
+    cursor.execute("SELECT COUNT(*) FROM restaurants")
+    if cursor.fetchone()[0] == 0:
+        cursor.executemany("""
+            INSERT INTO restaurants (restaurant_id, name, description, address, city, phone, email, rating, is_active)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, [
+            (1, "SmartBite Kitchen", "Healthy and delicious meals", "Road No 36, Jubilee Hills", "Hyderabad", "+91 98765 00001", "info@smartbitekitchen.com", 4.5, 1),
+            (2, "Green Bowl Cafe", "Healthy salads, bowls and nutritious meals", "Banjara Hills Road 12", "Hyderabad", "+91 98765 00002", "hello@greenbowl.in", 4.4, 1),
+            (3, "Spice Garden", "Authentic Indian food with delicious flavors", "Cyber Towers, Hitec City", "Hyderabad", "+91 98765 00003", "contact@spicegarden.com", 4.6, 1),
+            (4, "Urban Bites", "Gourmet wraps, bowls and fresh juices", "Inorbit Mall Road, Madhapur", "Hyderabad", "+91 98765 00004", "orders@urbanbites.in", 4.5, 1)
+        ])
+        conn.commit()
+
+    # Seed categories if empty
+    cursor.execute("SELECT COUNT(*) FROM categories")
+    if cursor.fetchone()[0] == 0:
+        cursor.executemany("""
+            INSERT INTO categories (category_id, category_name, description)
+            VALUES (?, ?, ?)
+        """, [
+            (1, "Healthy Bowls", "Nutrient-packed macro bowls"),
+            (2, "Biryani", "Authentic Hyderabadi specialities"),
+            (3, "South Indian", "Crisp dosas and wholesome traditional tiffins"),
+            (4, "Sandwiches & Wraps", "High-protein artisanal sourdough sandwiches")
+        ])
+        conn.commit()
+
+    # Seed foods if empty
+    cursor.execute("SELECT COUNT(*) FROM food_items")
+    if cursor.fetchone()[0] == 0:
+        cursor.executemany("""
+            INSERT INTO food_items (food_id, restaurant_id, category_id, food_name, description, price, calories, protein, carbohydrates, fat, fiber, health_rating, is_vegetarian, image_url, is_available)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, [
+            (1, 1, 2, "Chicken Biryani", "Fragrant Basmati rice cooked with tender spiced chicken and saffron", 199.00, 580, 28.0, 62.0, 16.0, 4.0, 85, 0, "chicken-biryani.jpg", 1),
+            (2, 3, 3, "Masala Dosa", "Crispy golden fermented crepe stuffed with spiced potato masala", 129.00, 320, 8.0, 48.0, 9.0, 5.0, 90, 1, "masala-dosa.jpg", 1),
+            (3, 2, 1, "Grilled Chicken Bowl", "Marinated grilled breast with brown rice, edamame and lemon vinaigrette", 249.00, 380, 42.0, 28.0, 8.0, 6.0, 95, 0, "grilled-chicken-bowl.jpg", 1),
+            (4, 2, 1, "Veggie Power Bowl", "Avocado, roasted chickpeas, purple cabbage, quinoa and tahini", 199.00, 310, 14.0, 38.0, 10.0, 9.0, 96, 1, "veggie-power-bowl.jpg", 1),
+            (5, 3, 1, "Paneer Tikka Bowl", "Tandoori cottage cheese cubes served over turmeric rice and garden greens", 229.00, 410, 22.0, 34.0, 14.0, 7.0, 88, 1, "paneer-tikka-bowl.jpg", 1),
+            (6, 4, 4, "Chicken Sandwich", "Herb-roasted pulled chicken breast on whole wheat sourdough", 169.00, 350, 24.0, 36.0, 9.0, 5.0, 89, 0, "chicken-sandwich.jpg", 1),
+            (7, 1, 1, "Fruit & Yogurt Bowl", "Greek yogurt with seasonal berries, chia seeds and organic honey", 149.00, 210, 9.0, 32.0, 3.0, 5.0, 94, 1, "fruit-yogurt-bowl.jpg", 1)
+        ])
+        conn.commit()
+
+    conn.close()
+
+# Initialize SQLite database immediately
+init_sqlite_database()
+
+
+def ensure_booking_and_support_tables(db):
+    """Safety check for table bookings and support tickets."""
+    init_sqlite_database()
 
 
 # =========================
@@ -27,11 +247,16 @@ def get_db_connection():
 def test_db():
     try:
         db = get_db_connection()
+        cursor = db.cursor()
+        cursor.execute("SELECT COUNT(*) FROM restaurants")
+        count = cursor.fetchone()[0]
+        cursor.close()
         db.close()
 
         return jsonify({
             "status": "success",
-            "database": "smartbite"
+            "database": "sqlite",
+            "restaurants_count": count
         })
 
     except Exception as e:
@@ -47,13 +272,12 @@ def test_db():
 
 @app.route("/register", methods=["POST"])
 def register():
-
     try:
-        data = request.get_json()
+        data = request.get_json() or {}
 
         name = data.get("name")
         email = data.get("email")
-        phone = data.get("phone")
+        phone = data.get("phone", "")
         password = data.get("password")
 
         if not name or not email or not password:
@@ -66,17 +290,12 @@ def register():
         cursor = db.cursor()
 
         # Check if email already exists
-        cursor.execute(
-            "SELECT user_id FROM users WHERE email = %s",
-            (email,)
-        )
-
+        cursor.execute("SELECT user_id FROM users WHERE email = %s", (email,))
         existing_user = cursor.fetchone()
 
         if existing_user:
             cursor.close()
             db.close()
-
             return jsonify({
                 "status": "error",
                 "message": "Email already registered"
@@ -90,22 +309,24 @@ def register():
             """,
             (name, email, phone, password)
         )
-
         db.commit()
-
         user_id = cursor.lastrowid
-
         cursor.close()
         db.close()
 
         return jsonify({
             "status": "success",
             "message": "Registration successful",
-            "user_id": user_id
+            "user_id": user_id,
+            "user": {
+                "user_id": user_id,
+                "name": name,
+                "email": email,
+                "phone": phone
+            }
         }), 201
 
     except Exception as e:
-
         return jsonify({
             "status": "error",
             "message": str(e)
@@ -118,9 +339,8 @@ def register():
 
 @app.route("/login", methods=["POST"])
 def login():
-
     try:
-        data = request.get_json()
+        data = request.get_json() or {}
 
         email = data.get("email")
         password = data.get("password")
@@ -142,9 +362,7 @@ def login():
             """,
             (email, password)
         )
-
         user = cursor.fetchone()
-
         cursor.close()
         db.close()
 
@@ -161,11 +379,11 @@ def login():
         }), 200
 
     except Exception as e:
-
         return jsonify({
             "status": "error",
             "message": str(e)
         }), 500
+
 
 # =========================
 # RESTAURANTS
@@ -173,7 +391,6 @@ def login():
 
 @app.route("/restaurants", methods=["GET"])
 def get_restaurants():
-
     try:
         db = get_db_connection()
         cursor = db.cursor(dictionary=True)
@@ -192,16 +409,13 @@ def get_restaurants():
             FROM restaurants
             WHERE is_active = 1
         """)
-
         restaurants = cursor.fetchall()
-
         cursor.close()
         db.close()
 
         return jsonify(restaurants)
 
     except Exception as e:
-
         return jsonify({
             "error": str(e)
         }), 500
@@ -213,7 +427,6 @@ def get_restaurants():
 
 @app.route("/foods", methods=["GET"])
 def get_foods():
-
     try:
         db = get_db_connection()
         cursor = db.cursor(dictionary=True)
@@ -237,29 +450,16 @@ def get_foods():
             FROM food_items
             WHERE is_available = 1
         """)
-
         foods = cursor.fetchall()
-
         cursor.close()
         db.close()
 
         return jsonify(foods)
 
     except Exception as e:
-
         return jsonify({
             "error": str(e)
         }), 500
-
-
-# =========================
-# IMAGE FOLDER
-# =========================
-
-IMAGE_FOLDER = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)),
-    "image"
-)
 
 
 # =========================
@@ -268,13 +468,7 @@ IMAGE_FOLDER = os.path.join(
 
 @app.route("/images/<path:filename>")
 def serve_image(filename):
-
-    print("Requested image:", filename)
-
-    return send_from_directory(
-        IMAGE_FOLDER,
-        filename
-    )
+    return send_from_directory(IMAGE_FOLDER, filename)
 
 
 # =========================
@@ -283,30 +477,28 @@ def serve_image(filename):
 
 @app.route("/")
 def home():
-
     return jsonify({
-        "message": "SmartBite Backend is running",
+        "message": "SmartBite Backend running with SQLite",
+        "database": DB_PATH,
         "image_folder": IMAGE_FOLDER
     })
 
 
-# =========================
-# RUN SERVER
-# =========================
 # =========================
 # CREATE ORDER
 # =========================
 
 @app.route("/orders", methods=["POST"])
 def create_order():
-
     try:
-        data = request.get_json()
+        data = request.get_json() or {}
 
         user_id = data.get("user_id")
-        restaurant_id = data.get("restaurant_id")
-        total_amount = data.get("total_amount")
-        items = data.get("items")
+        restaurant_id = data.get("restaurant_id", 1)
+        total_amount = data.get("total_amount", 0)
+        items = data.get("items", [])
+        delivery_address = data.get("delivery_address", "Hyderabad")
+        payment_method = data.get("payment_method", "UPI")
 
         if not user_id or not items:
             return jsonify({
@@ -317,42 +509,27 @@ def create_order():
         db = get_db_connection()
         cursor = db.cursor()
 
-        # Create order
         cursor.execute(
             """
             INSERT INTO orders
-            (user_id, restaurant_id, total_amount, order_status)
-            VALUES (%s, %s, %s, %s)
+            (user_id, restaurant_id, total_amount, order_status, delivery_address, payment_method)
+            VALUES (%s, %s, %s, %s, %s, %s)
             """,
-            (
-                user_id,
-                restaurant_id,
-                total_amount,
-                "Pending"
-            )
+            (user_id, restaurant_id, total_amount, "Pending", delivery_address, payment_method)
         )
-
         order_id = cursor.lastrowid
 
-        # Add order items
         for item in items:
-
             cursor.execute(
                 """
                 INSERT INTO order_items
                 (order_id, food_id, quantity, price)
                 VALUES (%s, %s, %s, %s)
                 """,
-                (
-                    order_id,
-                    item["food_id"],
-                    item.get("quantity", 1),
-                    item["price"]
-                )
+                (order_id, item.get("food_id"), item.get("quantity", 1), item.get("price", 0))
             )
 
         db.commit()
-
         cursor.close()
         db.close()
 
@@ -363,28 +540,24 @@ def create_order():
         }), 201
 
     except Exception as e:
-
-        if "db" in locals():
-            db.rollback()
-
         return jsonify({
             "status": "error",
             "message": str(e)
         }), 500
 
-    # =========================
-# ADD FAVORITE
+
+# =========================
+# FAVORITES
 # =========================
 
 @app.route("/favorites", methods=["POST"])
 def add_favorite():
-
     try:
-        data = request.get_json()
+        data = request.get_json() or {}
 
         user_id = data.get("user_id")
         food_id = data.get("food_id")
-        restaurant_id = data.get("restaurant_id")
+        restaurant_id = data.get("restaurant_id", 1)
 
         if not user_id or not food_id:
             return jsonify({
@@ -395,22 +568,15 @@ def add_favorite():
         db = get_db_connection()
         cursor = db.cursor()
 
-        # Check if already favorite
         cursor.execute(
-            """
-            SELECT favorite_id
-            FROM favorites
-            WHERE user_id = %s AND food_id = %s
-            """,
+            "SELECT favorite_id FROM favorites WHERE user_id = %s AND food_id = %s",
             (user_id, food_id)
         )
-
         existing = cursor.fetchone()
 
         if existing:
             cursor.close()
             db.close()
-
             return jsonify({
                 "status": "error",
                 "message": "Already added to favorites"
@@ -418,17 +584,13 @@ def add_favorite():
 
         cursor.execute(
             """
-            INSERT INTO favorites
-            (user_id, food_id, restaurant_id)
+            INSERT INTO favorites (user_id, food_id, restaurant_id)
             VALUES (%s, %s, %s)
             """,
             (user_id, food_id, restaurant_id)
         )
-
         db.commit()
-
         favorite_id = cursor.lastrowid
-
         cursor.close()
         db.close()
 
@@ -439,20 +601,14 @@ def add_favorite():
         }), 201
 
     except Exception as e:
-
         return jsonify({
             "status": "error",
             "message": str(e)
         }), 500
 
 
-# =========================
-# GET USER FAVORITES
-# =========================
-
 @app.route("/favorites/<int:user_id>", methods=["GET"])
 def get_favorites(user_id):
-
     try:
         db = get_db_connection()
         cursor = db.cursor(dictionary=True)
@@ -467,49 +623,36 @@ def get_favorites(user_id):
                 fi.price,
                 fi.image_url
             FROM favorites f
-            JOIN food_items fi
-                ON f.food_id = fi.food_id
+            JOIN food_items fi ON f.food_id = fi.food_id
             WHERE f.user_id = %s
             ORDER BY f.created_at DESC
             """,
             (user_id,)
         )
-
         favorites = cursor.fetchall()
-
         cursor.close()
         db.close()
 
         return jsonify(favorites)
 
     except Exception as e:
-
         return jsonify({
             "status": "error",
             "message": str(e)
         }), 500
 
-        # =========================
-# REMOVE FAVORITE
-# =========================
 
 @app.route("/favorites/<int:user_id>/<int:food_id>", methods=["DELETE"])
 def remove_favorite(user_id, food_id):
-
     try:
         db = get_db_connection()
         cursor = db.cursor()
 
         cursor.execute(
-            """
-            DELETE FROM favorites
-            WHERE user_id = %s AND food_id = %s
-            """,
+            "DELETE FROM favorites WHERE user_id = %s AND food_id = %s",
             (user_id, food_id)
         )
-
         db.commit()
-
         cursor.close()
         db.close()
 
@@ -519,58 +662,47 @@ def remove_favorite(user_id, food_id):
         }), 200
 
     except Exception as e:
-
         return jsonify({
             "status": "error",
             "message": str(e)
         }), 500
-    # =========================
-# GET USER ORDERS
-# =========================
+
 
 @app.route("/orders/<int:user_id>", methods=["GET"])
 def get_user_orders(user_id):
-
     try:
         db = get_db_connection()
         cursor = db.cursor(dictionary=True)
 
         cursor.execute(
-    """
-    SELECT
-        o.order_id,
-        o.user_id,
-        o.restaurant_id,
-        o.order_date,
-        o.total_amount,
-        o.order_status,
-        oi.order_item_id,
-        oi.food_id,
-        oi.quantity,
-        oi.price,
-        f.food_name
-    FROM orders o
-    LEFT JOIN order_items oi
-        ON o.order_id = oi.order_id
-    LEFT JOIN food_items f
-        ON oi.food_id = f.food_id
-    WHERE o.user_id = %s
-    ORDER BY o.order_date DESC
-    """,
-    (user_id,)
-)
-
+            """
+            SELECT
+                o.order_id,
+                o.user_id,
+                o.restaurant_id,
+                o.order_date,
+                o.total_amount,
+                o.order_status,
+                oi.order_item_id,
+                oi.food_id,
+                oi.quantity,
+                oi.price,
+                f.food_name
+            FROM orders o
+            LEFT JOIN order_items oi ON o.order_id = oi.order_id
+            LEFT JOIN food_items f ON oi.food_id = f.food_id
+            WHERE o.user_id = %s
+            ORDER BY o.order_date DESC
+            """,
+            (user_id,)
+        )
         orders = cursor.fetchall()
-
         cursor.close()
         db.close()
 
         return jsonify(orders), 200
 
     except Exception as e:
-
-        print("Get orders error:", e)
-
         return jsonify({
             "message": str(e)
         }), 500
@@ -580,47 +712,10 @@ def get_user_orders(user_id):
 # TABLE BOOKINGS
 # =========================
 
-def ensure_booking_and_support_tables(db):
-    cursor = db.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS table_bookings (
-            booking_id VARCHAR(50) PRIMARY KEY,
-            user_id INT NOT NULL,
-            restaurant_id INT NOT NULL,
-            restaurant_name VARCHAR(150),
-            guest_name VARCHAR(100) NOT NULL,
-            guest_phone VARCHAR(20) NOT NULL,
-            guests_count INT NOT NULL DEFAULT 2,
-            booking_date DATE NOT NULL,
-            booking_time VARCHAR(20) NOT NULL,
-            seating_area VARCHAR(50) DEFAULT 'Indoor AC',
-            occasion VARCHAR(50) DEFAULT 'Casual Dining',
-            special_requests TEXT,
-            booking_status VARCHAR(50) DEFAULT 'Confirmed',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS support_tickets (
-            ticket_id VARCHAR(50) PRIMARY KEY,
-            user_id INT NOT NULL,
-            order_id INT,
-            category VARCHAR(100) NOT NULL,
-            subject VARCHAR(200) NOT NULL,
-            description TEXT NOT NULL,
-            status VARCHAR(50) DEFAULT 'In Review',
-            resolution TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    db.commit()
-    cursor.close()
-
-
 @app.route("/table-bookings", methods=["POST"])
 def create_table_booking():
     try:
-        data = request.get_json()
+        data = request.get_json() or {}
         user_id = data.get("user_id", 1)
         restaurant_id = data.get("restaurant_id", 1)
         restaurant_name = data.get("restaurant_name", "SmartBite Dining")
@@ -639,11 +734,9 @@ def create_table_booking():
                 "message": "Guest name, phone, and booking date are required"
             }), 400
 
-        import random
         booking_id = f"TB-{random.randint(1000, 9999)}"
 
         db = get_db_connection()
-        ensure_booking_and_support_tables(db)
         cursor = db.cursor()
 
         cursor.execute("""
@@ -689,7 +782,6 @@ def create_table_booking():
 def get_user_table_bookings(user_id):
     try:
         db = get_db_connection()
-        ensure_booking_and_support_tables(db)
         cursor = db.cursor(dictionary=True)
 
         cursor.execute("""
@@ -739,7 +831,7 @@ def get_user_table_bookings(user_id):
 @app.route("/support-tickets", methods=["POST"])
 def create_support_ticket():
     try:
-        data = request.get_json()
+        data = request.get_json() or {}
         user_id = data.get("user_id", 1)
         order_id = data.get("order_id")
         category = data.get("category", "General Inquiry")
@@ -752,12 +844,10 @@ def create_support_ticket():
                 "message": "Subject and description are required"
             }), 400
 
-        import random
         ticket_id = f"TKT-{random.randint(10000, 99999)}"
         resolution = "SmartBite Care has received your ticket. An executive is actively handling your request."
 
         db = get_db_connection()
-        ensure_booking_and_support_tables(db)
         cursor = db.cursor()
 
         cursor.execute("""
@@ -799,7 +889,6 @@ def create_support_ticket():
 def get_user_support_tickets(user_id):
     try:
         db = get_db_connection()
-        ensure_booking_and_support_tables(db)
         cursor = db.cursor(dictionary=True)
 
         cursor.execute("""
@@ -834,11 +923,12 @@ def get_user_support_tickets(user_id):
             "message": str(e)
         }), 500
 
-if __name__ == "__main__":
 
+if __name__ == "__main__":
     print("-----------------------------------")
-    print("SmartBite Backend")
+    print("SmartBite Backend (SQLite Mode)")
     print("-----------------------------------")
+    print("Database:", DB_PATH)
     print("Image folder:", IMAGE_FOLDER)
     print("Server: http://127.0.0.1:5000")
     print("-----------------------------------")
@@ -846,5 +936,5 @@ if __name__ == "__main__":
     app.run(
         host="127.0.0.1",
         port=5000,
-        debug=True
+        debug=False
     )

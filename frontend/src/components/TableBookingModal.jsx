@@ -15,15 +15,10 @@ export default function TableBookingModal({
 
   const today = new Date();
   const todayStr = today.toISOString().split("T")[0];
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const tomorrowStr = tomorrow.toISOString().split("T")[0];
 
   const [date, setDate] = useState(todayStr);
   const [timeSlot, setTimeSlot] = useState("07:30 PM");
   const [guestsCount, setGuestsCount] = useState(2);
-  const [seatingArea, setSeatingArea] = useState("Indoor AC");
-  const [occasion, setOccasion] = useState("Casual Dining");
   const [guestName, setGuestName] = useState(loggedInUser?.name || "");
   const [guestPhone, setGuestPhone] = useState(loggedInUser?.phone || "");
   const [specialRequests, setSpecialRequests] = useState("");
@@ -32,7 +27,17 @@ export default function TableBookingModal({
   const [myBookings, setMyBookings] = useState([]);
   const [loadingBookings, setLoadingBookings] = useState(false);
 
-  // Fallback restaurant if none found
+  const availableSlots = [
+    "12:30 PM",
+    "01:15 PM",
+    "02:00 PM",
+    "07:00 PM",
+    "07:30 PM",
+    "08:15 PM",
+    "09:00 PM",
+    "09:30 PM"
+  ];
+
   const currentRest =
     restaurants.find((r) => r.restaurant_id === Number(selectedRestId)) ||
     restaurant ||
@@ -40,35 +45,12 @@ export default function TableBookingModal({
       restaurant_id: 1,
       name: "SmartBite Dining Kitchen",
       city: "Banjara Hills, Hyderabad",
-      rating: "4.8",
-      cuisine: "Multi-Cuisine & Healthy Bowls",
-      image_url: "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&auto=format&fit=crop&q=80"
+      rating: "4.8"
     };
 
-  const lunchSlots = ["12:30 PM", "01:15 PM", "02:00 PM", "02:45 PM"];
-  const dinnerSlots = ["07:00 PM", "07:30 PM", "08:15 PM", "09:00 PM", "09:45 PM", "10:15 PM"];
-
-  const seatingOptions = [
-    { id: "Indoor AC", label: "❄️ Indoor AC Dining", desc: "Cool, calm ambiance" },
-    { id: "Outdoor Rooftop", label: "🌆 Rooftop Terrace", desc: "Open sky & skyline view" },
-    { id: "Romantic Corner", label: "🕯️ Romantic Corner", desc: "Cozy private booth" },
-    { id: "Family Lounge", label: "👨‍👩‍👧 Family Long Table", desc: "Spacious seating" }
-  ];
-
-  const occasionOptions = [
-    "Casual Dining",
-    "Birthday Celebration 🎂",
-    "Anniversary ❤️",
-    "Business Dinner 💼",
-    "Family Gathering 👨‍👩‍👦"
-  ];
-
-  // Fetch bookings when switching to My Reservations tab
   useEffect(() => {
-    if (activeTab === "my_bookings") {
-      loadBookings();
-    }
-  }, [activeTab]);
+    loadBookings();
+  }, [loggedInUser, activeTab]);
 
   async function loadBookings() {
     setLoadingBookings(true);
@@ -104,21 +86,20 @@ export default function TableBookingModal({
         guests_count: guestsCount,
         booking_date: date,
         booking_time: timeSlot,
-        seating_area: seatingArea,
-        occasion: occasion,
         special_requests: specialRequests.trim() || "None"
       };
 
       const result = await apiService.createTableBooking(bookingPayload);
       if (result.success) {
         setConfirmedBooking(result.booking);
+        loadBookings();
         if (onBookingSuccess) {
           onBookingSuccess(result.booking);
         }
       }
     } catch (err) {
-      console.error("Booking submission error:", err);
-      alert("Could not reserve table. Please try again or call the restaurant directly.");
+      console.error("Booking error:", err);
+      alert("Could not reserve table. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -138,44 +119,42 @@ export default function TableBookingModal({
           ×
         </button>
 
-        {/* Modal Top Banner */}
-        <div className="booking-modal-header">
-          <div className="booking-header-badges">
-            <span className="booking-pill-badge">✨ INSTANT CONFIRMATION</span>
-            <span className="booking-pill-badge green">100% FREE BOOKING</span>
-          </div>
-          <h2>🍽️ Table Reservations</h2>
-          <p>Book premium dining tables across Hyderabad with zero reservation fee.</p>
-
-          {/* Navigation Tabs */}
-          <div className="booking-tabs-nav">
-            <button
-              type="button"
-              className={`booking-tab-btn ${activeTab === "reserve" ? "active" : ""}`}
-              onClick={() => {
-                setActiveTab("reserve");
-                setConfirmedBooking(null);
-              }}
-            >
-              📅 Reserve a Table
-            </button>
-            <button
-              type="button"
-              className={`booking-tab-btn ${activeTab === "my_bookings" ? "active" : ""}`}
-              onClick={() => setActiveTab("my_bookings")}
-            >
-              📋 My Reservations {myBookings.length > 0 && `(${myBookings.length})`}
-            </button>
-          </div>
-        </div>
-
         {activeTab === "reserve" ? (
           !confirmedBooking ? (
-            <form onSubmit={handleBookingSubmit} className="booking-form">
-              {/* Selected Restaurant Card */}
-              <div className="booking-section-card">
-                <label className="booking-field-label">1. Choose Dining Destination</label>
-                {restaurants.length > 1 && !restaurant && (
+            <>
+              <div className="booking-modal-header">
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <div>
+                    <span className="section-label">DINE IN WITH SMARTBITE</span>
+                    <h2>🍽️ Reserve a Restaurant Table</h2>
+                    <p>Instant table confirmation at top dining destinations in Hyderabad.</p>
+                  </div>
+                  {myBookings.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("my_bookings")}
+                      style={{
+                        background: "#fff7ed",
+                        border: "1px solid #fed7aa",
+                        color: "#ea580c",
+                        padding: "6px 14px",
+                        borderRadius: "20px",
+                        fontSize: "13px",
+                        fontWeight: "700",
+                        cursor: "pointer",
+                        whiteSpace: "nowrap"
+                      }}
+                    >
+                      📋 My Bookings ({myBookings.length})
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <form onSubmit={handleBookingSubmit} className="booking-form">
+                {/* Restaurant Selector */}
+                <div className="form-group">
+                  <label>Selected Restaurant:</label>
                   <select
                     value={selectedRestId}
                     onChange={(e) => setSelectedRestId(Number(e.target.value))}
@@ -187,177 +166,67 @@ export default function TableBookingModal({
                       </option>
                     ))}
                   </select>
-                )}
-
-                <div className="booking-rest-preview">
-                  <img
-                    src={currentRest.image_url}
-                    alt={currentRest.name}
-                    className="booking-rest-thumb"
-                    onError={(e) => {
-                      e.currentTarget.src =
-                        "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&auto=format&fit=crop&q=80";
-                    }}
-                  />
-                  <div className="booking-rest-info">
-                    <h4>{currentRest.name}</h4>
-                    <p>📍 {currentRest.address || currentRest.city || "Hyderabad, Telangana"}</p>
-                    <div className="booking-rest-tags">
-                      <span>★ {currentRest.rating || "4.8"} Rating</span>
-                      <span>⏱️ Open Now</span>
-                      <span>💰 ₹{currentRest.price_for_two || 500} for two</span>
-                    </div>
-                  </div>
                 </div>
-              </div>
 
-              {/* Date & Guests Row */}
-              <div className="booking-section-card">
-                <label className="booking-field-label">2. Date & Party Size</label>
-
-                {/* Quick Date Shortcuts */}
-                <div className="quick-date-chips">
-                  <button
-                    type="button"
-                    className={`date-chip ${date === todayStr ? "active" : ""}`}
-                    onClick={() => setDate(todayStr)}
-                  >
-                    Today ({today.toLocaleDateString("en-IN", { weekday: "short", day: "numeric" })})
-                  </button>
-                  <button
-                    type="button"
-                    className={`date-chip ${date === tomorrowStr ? "active" : ""}`}
-                    onClick={() => setDate(tomorrowStr)}
-                  >
-                    Tomorrow ({tomorrow.toLocaleDateString("en-IN", { weekday: "short", day: "numeric" })})
-                  </button>
-                  <div className="custom-date-picker">
+                {/* Date and Guests Count */}
+                <div className="form-row-2">
+                  <div className="form-group">
+                    <label>Date of Visit:</label>
                     <input
                       type="date"
                       min={todayStr}
                       value={date}
                       onChange={(e) => setDate(e.target.value)}
                       required
-                      className="booking-input-date"
+                      className="booking-input"
                     />
                   </div>
-                </div>
 
-                {/* Guest Counter */}
-                <div className="booking-guest-row">
-                  <span className="guest-row-title">Number of Guests:</span>
-                  <div className="guest-counter-control">
-                    <button
-                      type="button"
-                      onClick={() => setGuestsCount((g) => Math.max(1, g - 1))}
-                      aria-label="Decrease guests"
-                    >
-                      −
-                    </button>
-                    <span className="guest-number-display">
-                      {guestsCount} {guestsCount === 1 ? "Person" : "Persons"}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setGuestsCount((g) => Math.min(15, g + 1))}
-                      aria-label="Increase guests"
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-
-                {/* Quick Guest Count Pills */}
-                <div className="quick-guest-pills">
-                  {[2, 4, 6, 8, 10].map((num) => (
-                    <button
-                      type="button"
-                      key={num}
-                      className={`guest-pill-btn ${guestsCount === num ? "active" : ""}`}
-                      onClick={() => setGuestsCount(num)}
-                    >
-                      {num} Guests
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Time Slots */}
-              <div className="booking-section-card">
-                <label className="booking-field-label">3. Select Dining Time</label>
-
-                <div className="time-group">
-                  <span className="time-group-label">☀️ Lunch Hours</span>
-                  <div className="time-slots-grid">
-                    {lunchSlots.map((slot) => (
+                  <div className="form-group">
+                    <label>Number of Guests:</label>
+                    <div className="guest-counter">
                       <button
                         type="button"
-                        key={slot}
-                        className={`time-slot-btn ${timeSlot === slot ? "active" : ""}`}
-                        onClick={() => setTimeSlot(slot)}
+                        onClick={() => setGuestsCount((g) => Math.max(1, g - 1))}
+                        aria-label="Decrease guests"
                       >
-                        {slot}
+                        −
                       </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="time-group" style={{ marginTop: "14px" }}>
-                  <span className="time-group-label">🌙 Dinner Hours</span>
-                  <div className="time-slots-grid">
-                    {dinnerSlots.map((slot) => (
+                      <span>
+                        {guestsCount} {guestsCount === 1 ? "Guest" : "Guests"}
+                      </span>
                       <button
                         type="button"
-                        key={slot}
-                        className={`time-slot-btn ${timeSlot === slot ? "active" : ""}`}
-                        onClick={() => setTimeSlot(slot)}
+                        onClick={() => setGuestsCount((g) => Math.min(12, g + 1))}
+                        aria-label="Increase guests"
                       >
-                        {slot}
+                        +
                       </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Seating Preference & Occasion */}
-              <div className="booking-section-card">
-                <label className="booking-field-label">4. Seating Area & Occasion</label>
-
-                <div className="seating-grid">
-                  {seatingOptions.map((opt) => (
-                    <div
-                      key={opt.id}
-                      className={`seating-card ${seatingArea === opt.id ? "active" : ""}`}
-                      onClick={() => setSeatingArea(opt.id)}
-                    >
-                      <strong>{opt.label}</strong>
-                      <small>{opt.desc}</small>
                     </div>
-                  ))}
+                  </div>
                 </div>
 
-                <div className="occasion-select-row" style={{ marginTop: "14px" }}>
-                  <label>Dining Occasion:</label>
-                  <select
-                    value={occasion}
-                    onChange={(e) => setOccasion(e.target.value)}
-                    className="booking-input-select"
-                  >
-                    {occasionOptions.map((occ) => (
-                      <option key={occ} value={occ}>
-                        {occ}
-                      </option>
+                {/* Time Slots */}
+                <div className="form-group">
+                  <label>Select Time Slot:</label>
+                  <div className="time-slots-grid">
+                    {availableSlots.map((slot) => (
+                      <button
+                        type="button"
+                        key={slot}
+                        className={`time-slot-btn ${timeSlot === slot ? "active" : ""}`}
+                        onClick={() => setTimeSlot(slot)}
+                      >
+                        {slot}
+                      </button>
                     ))}
-                  </select>
+                  </div>
                 </div>
-              </div>
 
-              {/* Contact Information */}
-              <div className="booking-section-card">
-                <label className="booking-field-label">5. Guest Contact Details</label>
-                <div className="booking-inputs-grid">
-                  <div className="booking-form-item">
-                    <label>Full Name *</label>
+                {/* Contact Info */}
+                <div className="form-row-2">
+                  <div className="form-group">
+                    <label>Your Full Name:</label>
                     <input
                       type="text"
                       placeholder="E.g. Mohammed Ahmed"
@@ -367,11 +236,12 @@ export default function TableBookingModal({
                       className="booking-input"
                     />
                   </div>
-                  <div className="booking-form-item">
-                    <label>Mobile Number *</label>
+
+                  <div className="form-group">
+                    <label>Contact Mobile Number:</label>
                     <input
                       type="tel"
-                      placeholder="10-digit WhatsApp/Mobile"
+                      placeholder="10-digit mobile number"
                       value={guestPhone}
                       onChange={(e) => setGuestPhone(e.target.value)}
                       required
@@ -380,156 +250,173 @@ export default function TableBookingModal({
                   </div>
                 </div>
 
-                <div className="booking-form-item" style={{ marginTop: "12px" }}>
-                  <label>Special Requests (Optional)</label>
+                {/* Special Requests */}
+                <div className="form-group">
+                  <label>Special Requests (Optional):</label>
                   <input
                     type="text"
-                    placeholder="E.g. High chair needed, cake arrangement, quiet table..."
+                    placeholder="E.g. Quiet corner, High chair, Birthday celebration"
                     value={specialRequests}
                     onChange={(e) => setSpecialRequests(e.target.value)}
                     className="booking-input"
                   />
                 </div>
-              </div>
 
-              {/* Submit Button */}
-              <div className="booking-actions-footer">
                 <button type="submit" className="booking-submit-cta" disabled={isSubmitting}>
-                  {isSubmitting ? (
-                    "Securing Reservation..."
-                  ) : (
-                    <>Confirm Reservation at {currentRest.name} →</>
-                  )}
+                  {isSubmitting ? "Securing Table..." : `Confirm Reservation at ${currentRest.name}`}
                 </button>
-                <p className="booking-guarantee-note">
-                  🔒 Instant confirmation SMS & WhatsApp message will be sent. Cancellation is free anytime.
-                </p>
-              </div>
-            </form>
+              </form>
+            </>
           ) : (
-            /* Confirmation Pass */
+            /* Confirmation Screen */
             <div className="booking-success-view">
-              <div className="success-badge-pulse">🎉</div>
+              <div className="success-icon-badge">✅</div>
               <h2>Table Reserved Successfully!</h2>
               <p className="booking-subhead">
-                Your reservation at <strong>{confirmedBooking.restaurant_name}</strong> is confirmed.
+                Your table is reserved at <strong>{confirmedBooking.restaurant_name}</strong>.
               </p>
 
-              <div className="booking-pass-card">
-                <div className="pass-header">
-                  <div>
-                    <span className="pass-brand">SMARTBITE DINE-IN PASS</span>
-                    <h3>{confirmedBooking.restaurant_name}</h3>
-                  </div>
-                  <div className="pass-code">
-                    <span>BOOKING ID</span>
-                    <strong>{confirmedBooking.booking_id}</strong>
-                  </div>
+              <div className="booking-confirmation-card">
+                <div className="confirm-row">
+                  <span>Booking ID:</span>
+                  <strong>{confirmedBooking.booking_id}</strong>
                 </div>
-
-                <div className="pass-grid">
-                  <div className="pass-item">
-                    <small>DATE</small>
-                    <strong>{confirmedBooking.booking_date}</strong>
-                  </div>
-                  <div className="pass-item">
-                    <small>TIME</small>
-                    <strong>{confirmedBooking.booking_time}</strong>
-                  </div>
-                  <div className="pass-item">
-                    <small>GUESTS</small>
-                    <strong>{confirmedBooking.guests_count} Persons</strong>
-                  </div>
-                  <div className="pass-item">
-                    <small>SEATING</small>
-                    <strong>{confirmedBooking.seating_area || "Indoor AC"}</strong>
-                  </div>
-                  <div className="pass-item">
-                    <small>GUEST NAME</small>
-                    <strong>{confirmedBooking.guest_name}</strong>
-                  </div>
-                  <div className="pass-item">
-                    <small>STATUS</small>
-                    <span className="confirmed-pill">● Confirmed</span>
-                  </div>
+                <div className="confirm-row">
+                  <span>Date & Time:</span>
+                  <strong>{confirmedBooking.booking_date} at {confirmedBooking.booking_time}</strong>
                 </div>
-
+                <div className="confirm-row">
+                  <span>Party Size:</span>
+                  <strong>{confirmedBooking.guests_count} Guests</strong>
+                </div>
+                <div className="confirm-row">
+                  <span>Reserved For:</span>
+                  <strong>{confirmedBooking.guest_name} ({confirmedBooking.guest_phone})</strong>
+                </div>
                 {confirmedBooking.special_requests && confirmedBooking.special_requests !== "None" && (
-                  <div className="pass-note">
-                    <small>SPECIAL REQUEST:</small>
-                    <p>{confirmedBooking.special_requests}</p>
+                  <div className="confirm-row">
+                    <span>Special Note:</span>
+                    <strong>{confirmedBooking.special_requests}</strong>
                   </div>
                 )}
+                <div className="confirm-row status">
+                  <span>Reservation Status:</span>
+                  <span className="confirmed-pill">● Confirmed</span>
+                </div>
               </div>
 
-              <div className="booking-success-actions">
+              <div className="success-actions" style={{ display: "flex", gap: "12px", justifyContent: "center" }}>
+                <button className="primary-btn" onClick={onClose}>
+                  Done & Continue Browsing
+                </button>
                 <button
                   type="button"
-                  className="primary-btn"
+                  className="secondary-btn"
                   onClick={() => {
+                    setConfirmedBooking(null);
                     setActiveTab("my_bookings");
-                    loadBookings();
                   }}
                 >
-                  View My Reservations
-                </button>
-                <button type="button" className="secondary-btn" onClick={onClose}>
-                  Back to SmartBite
+                  View All Reservations
                 </button>
               </div>
             </div>
           )
         ) : (
-          /* My Reservations Tab */
-          <div className="my-reservations-view">
+          /* My Reservations View */
+          <div className="my-reservations-view" style={{ padding: "10px 0" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+              <div>
+                <span className="section-label">SMARTBITE DINING</span>
+                <h2>📋 My Table Reservations</h2>
+              </div>
+              <button
+                type="button"
+                className="primary-btn"
+                onClick={() => {
+                  setConfirmedBooking(null);
+                  setActiveTab("reserve");
+                }}
+                style={{ padding: "8px 16px", fontSize: "13px" }}
+              >
+                + Book Another Table
+              </button>
+            </div>
+
             {loadingBookings ? (
-              <div className="loading-bookings">Fetching your reservations...</div>
+              <div style={{ textAlign: "center", padding: "40px", color: "#6b7280" }}>
+                Loading your reservations...
+              </div>
             ) : myBookings.length === 0 ? (
-              <div className="no-bookings-placeholder">
-                <span className="no-bookings-icon">🍽️</span>
-                <h3>No Table Reservations Yet</h3>
-                <p>Reserve a table in advance at top Hyderabad kitchens to skip queues.</p>
+              <div style={{ textAlign: "center", padding: "40px 20px" }}>
+                <span style={{ fontSize: "48px", display: "block", marginBottom: "12px" }}>🍽️</span>
+                <h3>No Table Reservations Found</h3>
+                <p style={{ color: "#6b7280", margin: "8px 0 20px" }}>
+                  Reserve a table in advance at top Hyderabad kitchens to skip queues.
+                </p>
                 <button
                   type="button"
                   className="primary-btn"
                   onClick={() => setActiveTab("reserve")}
-                  style={{ marginTop: "14px" }}
                 >
                   Book a Table Now
                 </button>
               </div>
             ) : (
-              <div className="reservations-list">
+              <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
                 {myBookings.map((b) => (
-                  <div key={b.booking_id} className="reservation-card-row">
-                    <div className="res-card-left">
-                      <span className="res-id">#{b.booking_id}</span>
-                      <h4>{b.restaurant_name}</h4>
-                      <div className="res-meta">
+                  <div
+                    key={b.booking_id}
+                    style={{
+                      border: "1px solid #e5e7eb",
+                      borderRadius: "14px",
+                      padding: "16px 20px",
+                      background: "#fafafa",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center"
+                    }}
+                  >
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+                        <span style={{ fontWeight: "700", color: "#ef6c2f", fontSize: "14px" }}>
+                          #{b.booking_id}
+                        </span>
+                        <h4 style={{ margin: 0, fontSize: "16px" }}>{b.restaurant_name}</h4>
+                      </div>
+                      <div style={{ fontSize: "13px", color: "#4b5563", display: "flex", gap: "14px", flexWrap: "wrap", marginTop: "4px" }}>
                         <span>📅 {b.booking_date}</span>
                         <span>⏰ {b.booking_time}</span>
                         <span>👥 {b.guests_count} Guests</span>
-                        <span>🪑 {b.seating_area || "Indoor"}</span>
+                        <span>👤 {b.guest_name}</span>
                       </div>
-                      <small className="res-booked-for">Reserved for: {b.guest_name} ({b.guest_phone})</small>
                     </div>
 
-                    <div className="res-card-right">
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "8px" }}>
                       <span
-                        className={`status-pill ${
-                          b.status === "Cancelled" ? "cancelled" : "confirmed"
-                        }`}
+                        className={`confirmed-pill ${b.status === "Cancelled" ? "cancelled" : ""}`}
+                        style={{
+                          background: b.status === "Cancelled" ? "#fee2e2" : "#ecfdf5",
+                          color: b.status === "Cancelled" ? "#dc2626" : "#059669"
+                        }}
                       >
                         ● {b.status || "Confirmed"}
                       </span>
-
                       {b.status !== "Cancelled" && (
                         <button
                           type="button"
-                          className="cancel-res-btn"
                           onClick={() => handleCancelBooking(b.booking_id)}
+                          style={{
+                            background: "none",
+                            border: "none",
+                            color: "#ef4444",
+                            fontSize: "12px",
+                            cursor: "pointer",
+                            textDecoration: "underline",
+                            padding: 0
+                          }}
                         >
-                          Cancel Booking
+                          Cancel Reservation
                         </button>
                       )}
                     </div>

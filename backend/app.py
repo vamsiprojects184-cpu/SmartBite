@@ -640,7 +640,7 @@ def create_table_booking():
             }), 400
 
         import random
-        booking_id = f"SB-HYD-{random.randint(1000, 9999)}"
+        booking_id = f"TB-{random.randint(1000, 9999)}"
 
         db = get_db_connection()
         ensure_booking_and_support_tables(db)

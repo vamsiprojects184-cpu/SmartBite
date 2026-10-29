@@ -339,7 +339,7 @@ export const apiService = {
       console.warn("Backend /table-bookings POST error, falling back to local store:", e.message);
     }
 
-    const bookingId = createdBooking?.booking_id || "SB-HYD-" + Math.floor(1000 + Math.random() * 9000);
+    const bookingId = createdBooking?.booking_id || "TB-" + Math.floor(1000 + Math.random() * 9000);
     const newBooking = {
       booking_id: bookingId,
       restaurant_id: bookingData.restaurant_id,
